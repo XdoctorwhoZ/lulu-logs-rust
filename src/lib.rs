@@ -8,7 +8,7 @@
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 mod client;
 mod error;
@@ -331,6 +331,8 @@ impl ScenarioHandle {
             attribute: "scenario".to_string(),
             span_id,
             step_name: step_name.to_string(),
+            metadata: metadata.cloned(),
+            start_time: Instant::now(),
             finished: false,
         }
     }
@@ -700,11 +702,22 @@ pub struct StepHandle {
     attribute: String,
     span_id: String,
     step_name: String,
+    metadata: Option<Value>,
+    start_time: Instant,
     finished: bool,
 }
 
 impl StepHandle {
+    /// Attaches or replaces metadata for the `step_end` entry.
+    pub fn set_metadata(&mut self, metadata: &Value) {
+        self.metadata = Some(metadata.clone());
+    }
+
     /// Publishes a `step_end` log entry for this step.
+    ///
+    /// The duration is automatically calculated from the time the step was
+    /// created. Metadata stored via [`set_metadata`](Self::set_metadata) (or
+    /// passed at creation time) is included in the entry.
     ///
     /// Prints a coloured `✓` / `✗` line when `terminal_logger` is enabled.
     ///
@@ -714,16 +727,13 @@ impl StepHandle {
     pub fn end(
         mut self,
         result: anyhow::Result<()>,
-        duration_ms: Option<u64>,
-        metadata: Option<&Value>,
-        result_data: Option<&Value>,
     ) {
         self.finished = true;
         match result {
-            Ok(()) => self.finish(true, None, duration_ms, metadata, result_data),
+            Ok(()) => self.finish(true, None),
             Err(e) => {
                 let err_str = e.to_string();
-                self.finish(false, Some(&err_str), duration_ms, metadata, result_data);
+                self.finish(false, Some(&err_str));
             }
         }
     }
@@ -732,10 +742,8 @@ impl StepHandle {
         &self,
         success: bool,
         error: Option<&str>,
-        duration_ms: Option<u64>,
-        metadata: Option<&Value>,
-        result: Option<&Value>,
     ) {
+        let duration_ms = Some(self.start_time.elapsed().as_millis() as u64);
         terminal_logger::print_step_end(&self.step_name, success, error);
         let json = build_span_payload(
             &self.span_id,
@@ -744,8 +752,8 @@ impl StepHandle {
             Some(success),
             error,
             duration_ms,
-            metadata,
-            result,
+            self.metadata.as_ref(),
+            None,
         );
         let level = if success {
             LogLevel::Info
@@ -761,7 +769,7 @@ impl StepHandle {
 impl Drop for StepHandle {
     fn drop(&mut self) {
         if !self.finished {
-            self.finish(true, None, None, None, None);
+            self.finish(true, None);
         }
     }
 }

@@ -835,9 +835,6 @@ fn inject_test_scenarios() {
     );
     step_ok.end(
         Ok(()),
-        Some(5),
-        Some(&step_metadata_ok),
-        Some(&step_result_ok),
     );
     std::thread::sleep(Duration::from_millis(300));
 
@@ -864,9 +861,6 @@ fn inject_test_scenarios() {
     );
     step_fail.end(
         Err(anyhow::anyhow!("Ripple 72mV exceeds 50mV limit")),
-        Some(8),
-        Some(&step_metadata_fail),
-        Some(&step_result_fail),
     );
 
     step_scenario.end(Err(anyhow::anyhow!("check-ripple failed")));
