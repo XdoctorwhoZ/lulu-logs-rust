@@ -75,7 +75,7 @@ fn scenario_voltage_regulation() {
     pace();
 
     let step1_result = json!({"actual_v": 3.31});
-    step1.end(true, None, Some(42), Some(&step1_meta), Some(&step1_result));
+    step1.end(Ok(()), Some(42), Some(&step1_meta), Some(&step1_result));
     pace();
 
     // ── Step 2: verify stability ──────────────────────────────────────────
@@ -89,11 +89,11 @@ fn scenario_voltage_regulation() {
     pace();
 
     let step2_result = json!({"min_v": 3.29, "max_v": 3.31, "ripple_mv": 20});
-    step2.end(true, None, Some(85), Some(&step2_meta), Some(&step2_result));
+    step2.end(Ok(()), Some(85), Some(&step2_meta), Some(&step2_result));
     pace();
 
     // ── End scenario — success ────────────────────────────────────────────
-    scenario.end(true, None);
+    scenario.end(Ok(()));
     pace();
 }
 
@@ -118,7 +118,7 @@ fn scenario_overcurrent_protection() {
     pace();
 
     let step1_result = json!({"peak_a": 0.95});
-    step1.end(true, None, Some(30), Some(&step1_meta), Some(&step1_result));
+    step1.end(Ok(()), Some(30), Some(&step1_meta), Some(&step1_result));
     pace();
 
     // ── Step 2: trigger protection (fails) ────────────────────────────────
@@ -132,8 +132,7 @@ fn scenario_overcurrent_protection() {
 
     let step2_result = json!({"peak_a": 1.05, "protection_triggered": false});
     step2.end(
-        false,
-        Some("protection did not trigger within 100ms"),
+        Err(anyhow::anyhow!("protection did not trigger within 100ms")),
         Some(105),
         Some(&step2_meta),
         Some(&step2_result),
@@ -141,7 +140,9 @@ fn scenario_overcurrent_protection() {
     pace();
 
     // ── End scenario — failure ────────────────────────────────────────────
-    scenario.end(false, Some("current reached 1.05A without tripping"));
+    scenario.end(Err(anyhow::anyhow!(
+        "current reached 1.05A without tripping"
+    )));
     pace();
 }
 
