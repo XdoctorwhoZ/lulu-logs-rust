@@ -258,7 +258,8 @@ fn build_span_payload(
 
 /// Handles errors from `lulu_publish` in the scenario/step context.
 ///
-/// * `QueueFull` is treated as a non-blocking warning and is silently ignored.
+/// * `QueueFull` is treated as a non-blocking warning and is logged via
+///   `eprintln!` before being ignored.
 /// * Any other error (e.g. `NotInitialized`) is a blocking programming error
 ///   and causes a panic.
 fn handle_scenario_publish_error(err: LuluError) {
