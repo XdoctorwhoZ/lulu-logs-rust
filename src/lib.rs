@@ -27,7 +27,7 @@ mod lulu_logs_generated;
 mod lulu_export_generated;
 
 // --- Public re-exports ---
-pub use client::{LuluConfig, LuluStats};
+pub use client::{LuluConfig, LuluConfigBuilder, LuluStats};
 pub use error::LuluError;
 pub use models::{Data, DataType, LogLevel};
 pub use publisher::LuluPublisher;
