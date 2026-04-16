@@ -652,7 +652,7 @@ fn inject_test_scenarios() {
     let name = "voltage-regulation-3v3";
 
     print_scenario_step("BEG", "test", "scenario", name);
-    let scenario1 = lulu_scenario(name).unwrap();
+    let scenario1 = lulu_scenario(name);
     std::thread::sleep(Duration::from_millis(10));
 
     // Some normal logs in between (these belong to the scenario)
@@ -675,14 +675,14 @@ fn inject_test_scenarios() {
     std::thread::sleep(Duration::from_millis(10));
 
     print_scenario_step("END", "test", "scenario", &format!("{} → SUCCESS", name));
-    let _ = scenario1.end(true, None);
+    scenario1.end(true, None);
     std::thread::sleep(Duration::from_millis(300));
 
     // ── Scenario 2: failing test ──────────────────────────────────────────
     let name2 = "overcurrent-protection";
 
     print_scenario_step("BEG", "test", "scenario", name2);
-    let scenario2 = lulu_scenario(name2).unwrap();
+    let scenario2 = lulu_scenario(name2);
     std::thread::sleep(Duration::from_millis(10));
 
     let _ = lulu_publish(
@@ -713,7 +713,7 @@ fn inject_test_scenarios() {
     std::thread::sleep(Duration::from_millis(10));
 
     print_scenario_step("END", "test", "scenario", &format!("{} → FAIL", name2));
-    let _ = scenario2.end(
+    scenario2.end(
         false,
         Some("Current reached 1.05A, protection did not trigger within 100ms"),
     );
@@ -723,7 +723,7 @@ fn inject_test_scenarios() {
     let name3 = "signal-integrity-check";
 
     print_scenario_step("BEG", "test", "scenario", name3);
-    let _scenario3 = lulu_scenario(name3).unwrap();
+    let _scenario3 = lulu_scenario(name3);
     std::thread::sleep(Duration::from_millis(10));
 
     let _ = lulu_publish(
@@ -816,7 +816,7 @@ fn inject_test_scenarios() {
     std::thread::sleep(Duration::from_millis(300));
 
     // ── Step spans ────────────────────────────────────────────────────────
-    let step_scenario = lulu_scenario("step-demo").unwrap();
+    let step_scenario = lulu_scenario("step-demo");
 
     // Step 1: passing step
     let step_name_ok = "measure-voltage";
@@ -824,8 +824,7 @@ fn inject_test_scenarios() {
 
     print_scenario_step("BEG", "test", "scenario", &format!("step {}", step_name_ok));
     let step_ok = step_scenario
-        .step_with_metadata(step_name_ok, Some(&step_metadata_ok))
-        .unwrap();
+        .step_with_metadata(step_name_ok, Some(&step_metadata_ok));
     std::thread::sleep(Duration::from_millis(10));
 
     let step_result_ok = json!({"measured_v": 3.31});
@@ -835,7 +834,7 @@ fn inject_test_scenarios() {
         "scenario",
         &format!("step {} → SUCCESS", step_name_ok),
     );
-    let _ = step_ok.end(
+    step_ok.end(
         true,
         None,
         Some(5),
@@ -855,8 +854,7 @@ fn inject_test_scenarios() {
         &format!("step {}", step_name_fail),
     );
     let step_fail = step_scenario
-        .step_with_metadata(step_name_fail, Some(&step_metadata_fail))
-        .unwrap();
+        .step_with_metadata(step_name_fail, Some(&step_metadata_fail));
     std::thread::sleep(Duration::from_millis(10));
 
     let step_result_fail = json!({"measured_ripple_mv": 72});
@@ -866,7 +864,7 @@ fn inject_test_scenarios() {
         "scenario",
         &format!("step {} → FAIL", step_name_fail),
     );
-    let _ = step_fail.end(
+    step_fail.end(
         false,
         Some("Ripple 72mV exceeds 50mV limit"),
         Some(8),
@@ -874,7 +872,7 @@ fn inject_test_scenarios() {
         Some(&step_result_fail),
     );
 
-    let _ = step_scenario.end(false, Some("check-ripple failed"));
+    step_scenario.end(false, Some("check-ripple failed"));
     println!("────────────────────────────────────────────────────────");
 }
 

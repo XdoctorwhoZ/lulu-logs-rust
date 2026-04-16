@@ -256,6 +256,23 @@ fn build_span_payload(
     Value::Object(payload).to_string()
 }
 
+/// Handles errors from `lulu_publish` in the scenario/step context.
+///
+/// * `QueueFull` is treated as a non-blocking warning and is logged via
+///   `eprintln!` before being ignored.
+/// * Any other error (e.g. `NotInitialized`) is a blocking programming error
+///   and causes a panic.
+fn handle_scenario_publish_error(err: LuluError) {
+    match err {
+        LuluError::QueueFull => {
+            eprintln!("[lulu-logs] warning: publish queue is full, message dropped");
+        }
+        other => {
+            panic!("[lulu-logs] fatal scenario error: {other}");
+        }
+    }
+}
+
 /// Handle returned by [`lulu_scenario`] to mark the end of a test scenario.
 ///
 /// Call [`.end()`](ScenarioHandle::end) to publish the `scenario_end` entry.
@@ -272,16 +289,24 @@ impl ScenarioHandle {
     /// Source and attribute are inherited from the scenario (`"test"` / `"scenario"`).
     /// The `span_id` is auto-generated as `"step-{step_name}-{random6}"`.
     /// Prints a coloured `▸ step_name` line when `terminal_logger` is enabled.
-    pub fn step(&self, step_name: &str) -> Result<StepHandle, LuluError> {
+    ///
+    /// # Panics
+    /// Panics if the client is not initialised. A full publish queue is
+    /// treated as a warning and silently ignored.
+    pub fn step(&self, step_name: &str) -> StepHandle {
         self.step_with_metadata(step_name, None)
     }
 
     /// Same as [`step`](Self::step) but attaches metadata to the `step_beg` entry.
+    ///
+    /// # Panics
+    /// Panics if the client is not initialised. A full publish queue is
+    /// treated as a warning and silently ignored.
     pub fn step_with_metadata(
         &self,
         step_name: &str,
         metadata: Option<&Value>,
-    ) -> Result<StepHandle, LuluError> {
+    ) -> StepHandle {
         terminal_logger::print_step_beg(step_name);
         let span_id = format!(
             "step-{}-{}",
@@ -298,25 +323,31 @@ impl ScenarioHandle {
             metadata,
             None,
         );
-        lulu_publish("test", "scenario", LogLevel::Info, Data::StepBeg(json))?;
-        Ok(StepHandle {
+        if let Err(e) = lulu_publish("test", "scenario", LogLevel::Info, Data::StepBeg(json)) {
+            handle_scenario_publish_error(e);
+        }
+        StepHandle {
             source: "test".to_string(),
             attribute: "scenario".to_string(),
             span_id,
             step_name: step_name.to_string(),
             finished: false,
-        })
+        }
     }
 
     /// Publishes a `scenario_end` log entry for this scenario.
     ///
     /// Prints a coloured `✓` / `✗` line when `terminal_logger` is enabled.
-    pub fn end(mut self, success: bool, error: Option<&str>) -> Result<(), LuluError> {
+    ///
+    /// # Panics
+    /// Panics if the client is not initialised. A full publish queue is
+    /// treated as a warning and silently ignored.
+    pub fn end(mut self, success: bool, error: Option<&str>) {
         self.finished = true;
-        self.finish(success, error)
+        self.finish(success, error);
     }
 
-    fn finish(&self, success: bool, error: Option<&str>) -> Result<(), LuluError> {
+    fn finish(&self, success: bool, error: Option<&str>) {
         terminal_logger::print_end(&self.scenario_name, success, error);
         let span_id = format!("scenario-{}", self.scenario_name);
         let json = build_span_payload(
@@ -334,14 +365,16 @@ impl ScenarioHandle {
         } else {
             LogLevel::Error
         };
-        lulu_publish("test", "scenario", level, Data::ScenarioEnd(json))
+        if let Err(e) = lulu_publish("test", "scenario", level, Data::ScenarioEnd(json)) {
+            handle_scenario_publish_error(e);
+        }
     }
 }
 
 impl Drop for ScenarioHandle {
     fn drop(&mut self) {
         if !self.finished {
-            let _ = self.finish(true, None);
+            self.finish(true, None);
         }
     }
 }
@@ -351,7 +384,11 @@ impl Drop for ScenarioHandle {
 /// Source is always `"test"`, attribute is always `"scenario"`.
 /// The `span_id` is derived as `"scenario-{scenario_name}"`.
 /// Prints a coloured `▶ scenario_name` line when `terminal_logger` is enabled.
-pub fn lulu_scenario(scenario_name: &str) -> Result<ScenarioHandle, LuluError> {
+///
+/// # Panics
+/// Panics if the client is not initialised. A full publish queue is
+/// treated as a warning and silently ignored.
+pub fn lulu_scenario(scenario_name: &str) -> ScenarioHandle {
     terminal_logger::print_beg(scenario_name);
     let span_id = format!("scenario-{}", scenario_name);
     let json = build_span_payload(
@@ -364,11 +401,13 @@ pub fn lulu_scenario(scenario_name: &str) -> Result<ScenarioHandle, LuluError> {
         None,
         None,
     );
-    lulu_publish("test", "scenario", LogLevel::Info, Data::ScenarioBeg(json))?;
-    Ok(ScenarioHandle {
+    if let Err(e) = lulu_publish("test", "scenario", LogLevel::Info, Data::ScenarioBeg(json)) {
+        handle_scenario_publish_error(e);
+    }
+    ScenarioHandle {
         scenario_name: scenario_name.to_string(),
         finished: false,
-    })
+    }
 }
 
 /// Builder for a generic span.
@@ -662,6 +701,10 @@ impl StepHandle {
     /// Publishes a `step_end` log entry for this step.
     ///
     /// Prints a coloured `✓` / `✗` line when `terminal_logger` is enabled.
+    ///
+    /// # Panics
+    /// Panics if the client is not initialised. A full publish queue is
+    /// treated as a warning and silently ignored.
     pub fn end(
         mut self,
         success: bool,
@@ -669,9 +712,9 @@ impl StepHandle {
         duration_ms: Option<u64>,
         metadata: Option<&Value>,
         result: Option<&Value>,
-    ) -> Result<(), LuluError> {
+    ) {
         self.finished = true;
-        self.finish(success, error, duration_ms, metadata, result)
+        self.finish(success, error, duration_ms, metadata, result);
     }
 
     fn finish(
@@ -681,7 +724,7 @@ impl StepHandle {
         duration_ms: Option<u64>,
         metadata: Option<&Value>,
         result: Option<&Value>,
-    ) -> Result<(), LuluError> {
+    ) {
         terminal_logger::print_step_end(&self.step_name, success, error);
         let json = build_span_payload(
             &self.span_id,
@@ -698,14 +741,16 @@ impl StepHandle {
         } else {
             LogLevel::Error
         };
-        lulu_publish(&self.source, &self.attribute, level, Data::StepEnd(json))
+        if let Err(e) = lulu_publish(&self.source, &self.attribute, level, Data::StepEnd(json)) {
+            handle_scenario_publish_error(e);
+        }
     }
 }
 
 impl Drop for StepHandle {
     fn drop(&mut self) {
         if !self.finished {
-            let _ = self.finish(true, None, None, None, None);
+            self.finish(true, None, None, None, None);
         }
     }
 }
