@@ -49,6 +49,88 @@ impl Default for LuluConfig {
     }
 }
 
+impl LuluConfig {
+    /// Returns a new [`LuluConfigBuilder`] initialised with the default values.
+    pub fn builder() -> LuluConfigBuilder {
+        LuluConfigBuilder::default()
+    }
+}
+
+/// Builder for [`LuluConfig`].
+///
+/// Every field starts with the same default value used by
+/// [`LuluConfig::default()`]. Call [`build()`](LuluConfigBuilder::build) to
+/// obtain the final configuration.
+///
+/// # Example
+///
+/// ```rust
+/// use lulu_logs::LuluConfig;
+///
+/// let config = LuluConfig::builder()
+///     .broker_host("192.168.1.10")
+///     .broker_port(1884)
+///     .build();
+///
+/// assert_eq!(config.broker_host, "192.168.1.10");
+/// assert_eq!(config.broker_port, 1884);
+/// ```
+#[derive(Debug, Clone)]
+pub struct LuluConfigBuilder {
+    config: LuluConfig,
+}
+
+impl Default for LuluConfigBuilder {
+    fn default() -> Self {
+        Self {
+            config: LuluConfig::default(),
+        }
+    }
+}
+
+impl LuluConfigBuilder {
+    /// Sets the MQTT broker hostname or IP address.
+    pub fn broker_host(mut self, host: impl Into<String>) -> Self {
+        self.config.broker_host = host.into();
+        self
+    }
+
+    /// Sets the MQTT broker TCP port.
+    pub fn broker_port(mut self, port: u16) -> Self {
+        self.config.broker_port = port;
+        self
+    }
+
+    /// Sets the prefix used to generate the MQTT client ID (`{prefix}-{random}`).
+    pub fn client_id_prefix(mut self, prefix: impl Into<String>) -> Self {
+        self.config.client_id_prefix = prefix.into();
+        self
+    }
+
+    /// Sets the maximum number of pending messages in the internal queue.
+    pub fn queue_capacity(mut self, capacity: usize) -> Self {
+        self.config.queue_capacity = capacity;
+        self
+    }
+
+    /// Sets the MQTT keep-alive interval in seconds.
+    pub fn keep_alive_secs(mut self, secs: u64) -> Self {
+        self.config.keep_alive_secs = secs;
+        self
+    }
+
+    /// Enables or disables the coloured terminal logger for test scenarios.
+    pub fn terminal_logger(mut self, enabled: bool) -> Self {
+        self.config.terminal_logger = enabled;
+        self
+    }
+
+    /// Consumes the builder and returns the final [`LuluConfig`].
+    pub fn build(self) -> LuluConfig {
+        self.config
+    }
+}
+
 // ---------------------------------------------------------------------------
 // LuluStats
 // ---------------------------------------------------------------------------
@@ -285,5 +367,90 @@ async fn mqtt_connection_loop(
                 backoff_ms = (backoff_ms * 2).min(MAX_BACKOFF_MS);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_builder_defaults_match_config_default() {
+        let from_default = LuluConfig::default();
+        let from_builder = LuluConfig::builder().build();
+
+        assert_eq!(from_default.broker_host, from_builder.broker_host);
+        assert_eq!(from_default.broker_port, from_builder.broker_port);
+        assert_eq!(from_default.client_id_prefix, from_builder.client_id_prefix);
+        assert_eq!(from_default.queue_capacity, from_builder.queue_capacity);
+        assert_eq!(from_default.keep_alive_secs, from_builder.keep_alive_secs);
+        assert_eq!(from_default.terminal_logger, from_builder.terminal_logger);
+    }
+
+    #[test]
+    fn test_builder_broker_host() {
+        let config = LuluConfig::builder().broker_host("10.0.0.1").build();
+        assert_eq!(config.broker_host, "10.0.0.1");
+    }
+
+    #[test]
+    fn test_builder_broker_port() {
+        let config = LuluConfig::builder().broker_port(8883).build();
+        assert_eq!(config.broker_port, 8883);
+    }
+
+    #[test]
+    fn test_builder_client_id_prefix() {
+        let config = LuluConfig::builder().client_id_prefix("my-app").build();
+        assert_eq!(config.client_id_prefix, "my-app");
+    }
+
+    #[test]
+    fn test_builder_queue_capacity() {
+        let config = LuluConfig::builder().queue_capacity(512).build();
+        assert_eq!(config.queue_capacity, 512);
+    }
+
+    #[test]
+    fn test_builder_keep_alive_secs() {
+        let config = LuluConfig::builder().keep_alive_secs(30).build();
+        assert_eq!(config.keep_alive_secs, 30);
+    }
+
+    #[test]
+    fn test_builder_terminal_logger() {
+        let config = LuluConfig::builder().terminal_logger(true).build();
+        assert!(config.terminal_logger);
+    }
+
+    #[test]
+    fn test_builder_chaining_all_fields() {
+        let config = LuluConfig::builder()
+            .broker_host("mqtt.example.com")
+            .broker_port(8883)
+            .client_id_prefix("test-client")
+            .queue_capacity(1024)
+            .keep_alive_secs(60)
+            .terminal_logger(true)
+            .build();
+
+        assert_eq!(config.broker_host, "mqtt.example.com");
+        assert_eq!(config.broker_port, 8883);
+        assert_eq!(config.client_id_prefix, "test-client");
+        assert_eq!(config.queue_capacity, 1024);
+        assert_eq!(config.keep_alive_secs, 60);
+        assert!(config.terminal_logger);
+    }
+
+    #[test]
+    fn test_builder_accepts_string_types() {
+        // Verify `impl Into<String>` works with both &str and String.
+        let config = LuluConfig::builder()
+            .broker_host(String::from("host.docker.internal"))
+            .client_id_prefix("prefix")
+            .build();
+
+        assert_eq!(config.broker_host, "host.docker.internal");
+        assert_eq!(config.client_id_prefix, "prefix");
     }
 }
