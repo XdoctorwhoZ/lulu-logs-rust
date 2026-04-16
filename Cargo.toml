@@ -1,5 +1,5 @@
 [package]
-name = "lulu-logs-client"
+name = "lulu-logs"
 version = "0.1.0"
 edition = "2021"
 description = "MQTT client library for the lulu-logs protocol"
