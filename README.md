@@ -81,6 +81,64 @@ lulu_stop_recorder().unwrap();
 
 If `my_test_run.lulu` already exists, the new records are **appended** to the existing ones — the file is never overwritten. This makes it safe to call the recorder across multiple CI runs while keeping a single accumulated log file.
 
+### Terminal logger
+
+The terminal logger prints coloured one-liners to **stdout** so you can follow the test execution at a glance without reading the full MQTT log stream.
+
+#### Activating for scenarios, steps & spans
+
+Set `terminal_logger: true` in `LuluConfig` when you initialise the client:
+
+```rust
+use lulu_logs_client::{lulu_init, LuluConfig};
+
+lulu_init(LuluConfig {
+    terminal_logger: true,
+    ..Default::default()
+}).unwrap();
+```
+
+Once enabled, every call to `lulu_scenario`, `ScenarioHandle::step`, and `lulu_span` will print status lines automatically:
+
+```text
+---------------------------------------------------
+ ▶ my-scenario              — scenario started
+    ▸ check-voltage          — step started   (cyan)
+    ✓ check-voltage          — step passed    (green)
+ ✓ my-scenario              — scenario passed (green)
+ ✗ my-scenario — error …    — scenario failed (red)
+```
+
+#### Activating for a publisher
+
+Each `LuluPublisher` has its own terminal toggle, independent of the global flag. Chain `.terminal(true)` after construction:
+
+```rust
+use lulu_logs_client::{LuluPublisher, Data};
+
+let voltage = LuluPublisher::new("psu/channel-1", "voltage")
+    .unwrap()
+    .terminal(true);
+
+voltage.info(Data::Float32(3.31)).unwrap();
+voltage.warn(Data::Float32(2.80)).unwrap();
+```
+
+This produces output like:
+
+```text
+psu/channel-1 · voltage = Float32(3.31)
+psu/channel-1 · voltage = Float32(2.80)
+```
+
+#### Demo binary
+
+Run the included `lulu-terminal` binary to see the terminal logger in action:
+
+```bash
+cargo run --bin lulu-terminal
+```
+
 ## Included binaries
 
 - **lulu-inject** — Test log injector for UI testing and demonstration
