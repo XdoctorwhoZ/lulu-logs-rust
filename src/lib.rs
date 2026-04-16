@@ -342,9 +342,15 @@ impl ScenarioHandle {
     /// # Panics
     /// Panics if the client is not initialised. A full publish queue is
     /// treated as a warning and silently ignored.
-    pub fn end(mut self, success: bool, error: Option<&str>) {
+    pub fn end(mut self, result: anyhow::Result<()>) {
         self.finished = true;
-        self.finish(success, error);
+        match result {
+            Ok(()) => self.finish(true, None),
+            Err(e) => {
+                let err_str = e.to_string();
+                self.finish(false, Some(&err_str));
+            }
+        }
     }
 
     fn finish(&self, success: bool, error: Option<&str>) {
@@ -707,14 +713,19 @@ impl StepHandle {
     /// treated as a warning and silently ignored.
     pub fn end(
         mut self,
-        success: bool,
-        error: Option<&str>,
+        result: anyhow::Result<()>,
         duration_ms: Option<u64>,
         metadata: Option<&Value>,
-        result: Option<&Value>,
+        result_data: Option<&Value>,
     ) {
         self.finished = true;
-        self.finish(success, error, duration_ms, metadata, result);
+        match result {
+            Ok(()) => self.finish(true, None, duration_ms, metadata, result_data),
+            Err(e) => {
+                let err_str = e.to_string();
+                self.finish(false, Some(&err_str), duration_ms, metadata, result_data);
+            }
+        }
     }
 
     fn finish(
