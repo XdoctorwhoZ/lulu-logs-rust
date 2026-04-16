@@ -1,0 +1,47 @@
+// lulu_logs.fbs
+// Protocol: lulu-logs v1.3.0
+// Description: Schema for MQTT log payloads — source and attribute are carried
+//              exclusively by the topic, not present in this payload.
+
+namespace LuluLogs;
+
+// ---------------------------------------------------------------------------
+// Log severity levels — ordered from least to most severe.
+// ---------------------------------------------------------------------------
+enum LogLevel : byte {
+  Trace = 0,
+  Debug = 1,
+  Info  = 2,
+  Warn  = 3,
+  Error = 4,
+  Fatal = 5
+}
+
+// ---------------------------------------------------------------------------
+// Root table — one per MQTT publish.
+// The owning source and attribute name are NOT stored here;
+// they are derived from the MQTT topic.
+// ---------------------------------------------------------------------------
+table LogEntry {
+  // ISO 8601 UTC timestamp with millisecond precision.
+  // Example: "2026-02-26T14:30:00.123Z"
+  timestamp: string (required);
+
+  // Severity level of this log entry. Defaults to Info.
+  level: LogLevel = Info;
+
+  // Type descriptor for the data field.
+  // Determines how to interpret the raw bytes in `data`.
+  // Known values: "string", "int32", "int64", "float32", "float64", "bool", "json", "bytes",
+  //               "net_packet", "serial_chunk",
+  //               "span_beg", "span_end",
+  //               "scenario_beg", "scenario_end",
+  //               "tool_call_beg", "tool_call_end".
+  type: string (required);
+
+  // The actual data value as a raw binary buffer.
+  // Interpretation depends on the `type` field.
+  data: [ubyte] (required);
+}
+
+root_type LogEntry;
