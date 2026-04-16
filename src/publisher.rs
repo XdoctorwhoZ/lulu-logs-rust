@@ -54,6 +54,31 @@ impl LuluPublisher {
         })
     }
 
+    /// Returns a new publisher with a different `attribute`, keeping the same
+    /// `source` and `terminal` settings.
+    ///
+    /// The new attribute is validated before the publisher is returned.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use lulu_logs_client::{LuluPublisher, Data};
+    ///
+    /// let psu = LuluPublisher::new("psu/channel-1", "voltage").unwrap();
+    /// psu.att("current").unwrap().info(Data::Float32(1.25)).unwrap();
+    /// ```
+    ///
+    /// # Errors
+    /// Returns [`LuluError::InvalidAttribute`] if the new attribute is invalid.
+    pub fn att(&self, attribute: &str) -> Result<Self, LuluError> {
+        topic::validate_attribute(attribute)?;
+        Ok(Self {
+            source_segments: self.source_segments.clone(),
+            source: self.source.clone(),
+            attribute: attribute.to_string(),
+            terminal: self.terminal,
+        })
+    }
+
     /// Enables or disables terminal output for this publisher.
     ///
     /// When enabled, each publish prints a coloured line to stdout:
@@ -108,5 +133,48 @@ impl LuluPublisher {
     /// Publishes a `Fatal`-level log entry.
     pub fn fatal(&self, data: Data) -> Result<(), LuluError> {
         self.publish(LogLevel::Fatal, data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_att_changes_attribute() {
+        let pub1 = LuluPublisher::new("psu/channel-1", "voltage").unwrap();
+        let pub2 = pub1.att("current").unwrap();
+        assert_eq!(pub2.attribute, "current");
+        // source is preserved
+        assert_eq!(pub2.source, "psu/channel-1");
+        assert_eq!(pub2.source_segments, vec!["psu", "channel-1"]);
+    }
+
+    #[test]
+    fn test_att_preserves_terminal_flag() {
+        let pub1 = LuluPublisher::new("psu/channel-1", "voltage")
+            .unwrap()
+            .terminal(true);
+        let pub2 = pub1.att("current").unwrap();
+        assert!(pub2.terminal);
+    }
+
+    #[test]
+    fn test_att_does_not_modify_original() {
+        let pub1 = LuluPublisher::new("psu/channel-1", "voltage").unwrap();
+        let _pub2 = pub1.att("current").unwrap();
+        assert_eq!(pub1.attribute, "voltage");
+    }
+
+    #[test]
+    fn test_att_rejects_empty_attribute() {
+        let pub1 = LuluPublisher::new("psu/channel-1", "voltage").unwrap();
+        assert!(pub1.att("").is_err());
+    }
+
+    #[test]
+    fn test_att_rejects_attribute_with_slash() {
+        let pub1 = LuluPublisher::new("psu/channel-1", "voltage").unwrap();
+        assert!(pub1.att("a/b").is_err());
     }
 }
