@@ -61,14 +61,13 @@ fn scenario_voltage_regulation() {
         .terminal(true);
 
     // ── Begin scenario ────────────────────────────────────────────────────
-    let scenario = lulu_scenario("voltage-regulation-3v3").unwrap();
+    let scenario = lulu_scenario("voltage-regulation-3v3");
     pace();
 
     // ── Step 1: set voltage ───────────────────────────────────────────────
     let step1_meta = json!({"target_v": 3.3});
     let step1 = scenario
-        .step_with_metadata("set-voltage", Some(&step1_meta))
-        .unwrap();
+        .step_with_metadata("set-voltage", Some(&step1_meta));
     pace();
 
     // Simulate the action — publish real measurement data
@@ -76,14 +75,13 @@ fn scenario_voltage_regulation() {
     pace();
 
     let step1_result = json!({"actual_v": 3.31});
-    let _ = step1.end(true, None, Some(42), Some(&step1_meta), Some(&step1_result));
+    step1.end(true, None, Some(42), Some(&step1_meta), Some(&step1_result));
     pace();
 
     // ── Step 2: verify stability ──────────────────────────────────────────
     let step2_meta = json!({"samples": 10, "tolerance_mv": 50});
     let step2 = scenario
-        .step_with_metadata("verify-stability", Some(&step2_meta))
-        .unwrap();
+        .step_with_metadata("verify-stability", Some(&step2_meta));
     pace();
 
     let _ = voltage.info(Data::Float32(3.30));
@@ -91,11 +89,11 @@ fn scenario_voltage_regulation() {
     pace();
 
     let step2_result = json!({"min_v": 3.29, "max_v": 3.31, "ripple_mv": 20});
-    let _ = step2.end(true, None, Some(85), Some(&step2_meta), Some(&step2_result));
+    step2.end(true, None, Some(85), Some(&step2_meta), Some(&step2_result));
     pace();
 
     // ── End scenario — success ────────────────────────────────────────────
-    let _ = scenario.end(true, None);
+    scenario.end(true, None);
     pace();
 }
 
@@ -106,14 +104,13 @@ fn scenario_overcurrent_protection() {
         .terminal(true);
 
     // ── Begin scenario ────────────────────────────────────────────────────
-    let scenario = lulu_scenario("overcurrent-protection").unwrap();
+    let scenario = lulu_scenario("overcurrent-protection");
     pace();
 
     // ── Step 1: ramp current (passes) ─────────────────────────────────────
     let step1_meta = json!({"ramp_target_a": 0.95, "limit_a": 1.0});
     let step1 = scenario
-        .step_with_metadata("ramp-current", Some(&step1_meta))
-        .unwrap();
+        .step_with_metadata("ramp-current", Some(&step1_meta));
     pace();
 
     let _ = current.info(Data::Float32(0.45));
@@ -121,21 +118,20 @@ fn scenario_overcurrent_protection() {
     pace();
 
     let step1_result = json!({"peak_a": 0.95});
-    let _ = step1.end(true, None, Some(30), Some(&step1_meta), Some(&step1_result));
+    step1.end(true, None, Some(30), Some(&step1_meta), Some(&step1_result));
     pace();
 
     // ── Step 2: trigger protection (fails) ────────────────────────────────
     let step2_meta = json!({"inject_a": 1.05, "trip_timeout_ms": 100});
     let step2 = scenario
-        .step_with_metadata("trigger-protection", Some(&step2_meta))
-        .unwrap();
+        .step_with_metadata("trigger-protection", Some(&step2_meta));
     pace();
 
     let _ = current.error(Data::Float32(1.05));
     pace();
 
     let step2_result = json!({"peak_a": 1.05, "protection_triggered": false});
-    let _ = step2.end(
+    step2.end(
         false,
         Some("protection did not trigger within 100ms"),
         Some(105),
@@ -145,7 +141,7 @@ fn scenario_overcurrent_protection() {
     pace();
 
     // ── End scenario — failure ────────────────────────────────────────────
-    let _ = scenario.end(false, Some("current reached 1.05A without tripping"));
+    scenario.end(false, Some("current reached 1.05A without tripping"));
     pace();
 }
 
@@ -156,14 +152,13 @@ fn scenario_signal_integrity() {
         .terminal(true);
 
     // ── Begin scenario ────────────────────────────────────────────────────
-    let _scenario = lulu_scenario("signal-integrity-check").unwrap();
+    let _scenario = lulu_scenario("signal-integrity-check");
     pace();
 
     // ── Step: measure frequency (started, never completed) ────────────────
     let step_meta = json!({"expected_hz": 1_000_000});
     let _step = _scenario
-        .step_with_metadata("measure-frequency", Some(&step_meta))
-        .unwrap();
+        .step_with_metadata("measure-frequency", Some(&step_meta));
     pace();
 
     let _ = frequency.info(Data::Float64(1_000_000.0));
