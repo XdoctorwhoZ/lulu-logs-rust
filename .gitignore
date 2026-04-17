@@ -1,3 +1,5 @@
+*.lulu
+
 # Cargo
 Cargo.lock
 
