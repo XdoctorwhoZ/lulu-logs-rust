@@ -1,4 +1,4 @@
-//! # lulu-inject — Test log injector
+//! # lulu-test-inject — Test log injector
 //!
 //! This binary serves two purposes:
 //!
@@ -14,14 +14,17 @@
 //! ```
 //! cargo run                            # connects to 127.0.0.1:1883 (default)
 //! cargo run -- 192.168.1.10 1883       # connect to a remote broker
+//! cargo run -- --recorder              # record to lulu_recording.lulu (embedded broker)
+//! cargo run -- --recorder out.lulu     # record to a custom file path
 //! ```
 
+use std::path::PathBuf;
 use std::time::Duration;
 
-use lulu_logs_client::{
+use lulu_logs::{
     lulu_init, lulu_is_connected, lulu_publish, lulu_scenario, lulu_shutdown, lulu_span,
-    lulu_start_pulse, lulu_stats, lulu_stop_pulse, lulu_tool_call_beg, lulu_tool_call_end, Data,
-    LogLevel, LuluConfig,
+    lulu_start_pulse, lulu_start_recorder, lulu_stats, lulu_stop_pulse, lulu_stop_recorder,
+    lulu_tool_call_beg, lulu_tool_call_end, Data, LogLevel, LuluConfig,
 };
 use serde_json::json;
 
@@ -30,16 +33,46 @@ use serde_json::json;
 struct Args {
     broker_host: String,
     broker_port: u16,
+    /// `None` = normal mode, `Some(None)` = recorder with default path,
+    /// `Some(Some(path))` = recorder with custom path.
+    recorder: Option<Option<PathBuf>>,
 }
 
 fn parse_args() -> Args {
-    let mut iter = std::env::args().skip(1);
-    let broker_host = iter.next().unwrap_or_else(|| "127.0.0.1".to_string());
-    let broker_port = iter.next().and_then(|p| p.parse().ok()).unwrap_or(1883u16);
-    Args {
-        broker_host,
-        broker_port,
+    let mut args = Args {
+        broker_host: "127.0.0.1".to_string(),
+        broker_port: 1883,
+        recorder: None,
+    };
+    let mut iter = std::env::args().skip(1).peekable();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--recorder" => {
+                // Next arg is the optional file path (if it doesn't look like a flag).
+                let path = iter
+                    .peek()
+                    .filter(|a| !a.starts_with('-'))
+                    .map(|a| PathBuf::from(a));
+                if path.is_some() {
+                    iter.next(); // consume the path argument
+                }
+                args.recorder = Some(path);
+            }
+            other => {
+                // Positional: first is host, second is port.
+                if args.broker_host == "127.0.0.1" && args.broker_port == 1883 {
+                    args.broker_host = other.to_string();
+                    if let Some(port_str) = iter.peek() {
+                        if let Ok(port) = port_str.parse::<u16>() {
+                            args.broker_port = port;
+                            iter.next();
+                        }
+                    }
+                }
+            }
+        }
     }
+    args
 }
 
 // ─── Scenario definition ──────────────────────────────────────────────────────
@@ -875,41 +908,51 @@ fn print_scenario_step(tag: &str, source: &str, attr: &str, info: &str) {
 
 fn main() {
     let args = parse_args();
+    let use_recorder = args.recorder.is_some();
 
-    println!("lulu-inject — MQTT test log injector");
-    println!("  broker : {}:{}", args.broker_host, args.broker_port);
-    println!();
+    println!("lulu-test-inject — MQTT test log injector");
 
     // ── Step 1: initialise the lulu-logs-client library ───────────────────────────
-    //
-    // lulu_init() must be called exactly once per process.
-    // It spawns a dedicated background Tokio runtime and establishes the MQTT
-    // connection. The call blocks until the internal state is ready but does
-    // NOT wait for the MQTT handshake to complete.
-    let config = LuluConfig {
-        broker_host: args.broker_host,
-        broker_port: args.broker_port,
-        // Prefix used to build the MQTT client ID (a random suffix is appended
-        // automatically to avoid collisions when running multiple instances).
-        client_id_prefix: "lulu-inject".to_string(),
-        // How many messages may be queued while the broker is unreachable.
-        queue_capacity: 256,
-        // MQTT keep-alive interval in seconds.
-        keep_alive_secs: 5,
-        // Enable coloured test-scenario output on the terminal.
-        terminal_logger: true,
-    };
+    if use_recorder {
+        // --recorder mode: start an embedded MQTT broker + file recorder.
+        // lulu_start_recorder() calls lulu_init() internally.
+        let file_path = args.recorder.unwrap();
+        println!(
+            "  recorder: {}",
+            file_path
+                .as_deref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "lulu_recording.lulu (default)".to_string())
+        );
+        println!();
 
-    if let Err(e) = lulu_init(config) {
-        eprintln!("[ERROR] lulu_init failed: {e}");
-        std::process::exit(1);
+        if let Err(e) = lulu_start_recorder(file_path) {
+            eprintln!("[ERROR] lulu_start_recorder failed: {e}");
+            std::process::exit(1);
+        }
+        println!("[init] recorder started (embedded broker)");
+    } else {
+        // Normal mode: connect to an external MQTT broker.
+        println!("  broker : {}:{}", args.broker_host, args.broker_port);
+        println!();
+
+        let config = LuluConfig {
+            broker_host: args.broker_host,
+            broker_port: args.broker_port,
+            client_id_prefix: "lulu-test-inject".to_string(),
+            queue_capacity: 256,
+            keep_alive_secs: 5,
+            terminal_logger: true,
+        };
+
+        if let Err(e) = lulu_init(config) {
+            eprintln!("[ERROR] lulu_init failed: {e}");
+            std::process::exit(1);
+        }
+        println!("[init] lulu-logs-client initialised");
     }
 
-    println!("[init] lulu-logs-client initialised");
-
     // Give the MQTT connection a moment to complete its handshake.
-    // In production code you can poll lulu_is_connected() in a retry loop
-    // instead of using a blind sleep.
     std::thread::sleep(Duration::from_millis(500));
 
     if lulu_is_connected() {
@@ -1012,6 +1055,14 @@ fn main() {
     // tears down the MQTT connection and stops the background runtime.
     // Call this before the process exits to avoid losing enqueued messages.
     println!("[shutdown] draining queue…");
-    lulu_shutdown();
+    if use_recorder {
+        // lulu_stop_recorder() calls lulu_shutdown() internally, then writes
+        // (or appends to) the .lulu file.
+        if let Err(e) = lulu_stop_recorder() {
+            eprintln!("[ERROR] lulu_stop_recorder failed: {e}");
+        }
+    } else {
+        lulu_shutdown();
+    }
     println!("[shutdown] done");
 }
