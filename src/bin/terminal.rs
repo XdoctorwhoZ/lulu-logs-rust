@@ -25,7 +25,7 @@
 use std::thread;
 use std::time::Duration;
 
-use lulu_logs_client::{
+use lulu_logs::{
     lulu_init, lulu_scenario, lulu_shutdown, lulu_span, lulu_stats, Data, LuluConfig, LuluPublisher,
 };
 use serde_json::json;

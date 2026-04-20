@@ -1,10 +1,11 @@
 //! # Embedded recorder
 //!
 //! Starts a local MQTT broker and subscribes to `lulu/#` to capture all log
-//! entries published by the current process.  On shutdown the accumulated
-//! records are serialised as a `.lulu` FlatBuffers file.  If the target file
-//! already exists its existing records are preserved and the new ones are
-//! appended.
+//! entries published by the current process.  Records are flushed to the
+//! `.lulu` FlatBuffers file periodically (every 2 s) by a background task,
+//! so data is persisted incrementally rather than only at shutdown.
+//! If the target file already exists its existing records are preserved and
+//! new ones are appended.
 
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener};
@@ -35,14 +36,19 @@ pub(crate) struct CapturedRecord {
 // LuluRecorder
 // ---------------------------------------------------------------------------
 
+/// Interval between periodic flushes of the in-memory buffer to disk.
+const FLUSH_INTERVAL: Duration = Duration::from_secs(2);
+
 /// Runs an embedded MQTT broker and records all `lulu/#` messages.
 pub(crate) struct LuluRecorder {
-    /// Accumulated records (shared with the subscriber task).
+    /// Accumulated records (shared with the subscriber and flush tasks).
     records:  Arc<Mutex<Vec<CapturedRecord>>>,
     /// Destination file for the `.lulu` export.
     file_path: PathBuf,
     /// Handle to the subscriber task so we can abort it on stop.
     sub_handle: tokio::task::AbortHandle,
+    /// Handle to the periodic flush task so we can abort it on stop.
+    flush_handle: tokio::task::AbortHandle,
     /// MQTT client used by the subscriber (kept to send `disconnect` on stop).
     sub_client: AsyncClient,
 }
@@ -80,19 +86,26 @@ impl LuluRecorder {
         let sub_handle = tokio::spawn(subscriber_loop(event_loop, records_clone))
             .abort_handle();
 
+        // ── 5. Start the periodic flush task ─────────────────────────────────
+        let flush_records = Arc::clone(&records);
+        let flush_path    = file_path.clone();
+        let flush_handle  = tokio::spawn(flush_loop(flush_records, flush_path))
+            .abort_handle();
+
         Ok((
             Self {
                 records,
                 file_path,
                 sub_handle,
+                flush_handle,
                 sub_client,
             },
             port,
         ))
     }
 
-    /// Stops the subscriber, reads any existing `.lulu` file, merges with the
-    /// new records, and writes the result.
+    /// Stops the subscriber and flush tasks, then performs a final flush of
+    /// any remaining buffered records to disk.
     pub(crate) async fn stop(self) -> anyhow::Result<()> {
         // Disconnect subscriber gracefully; ignore errors (broker may be gone).
         let _ = self.sub_client.disconnect().await;
@@ -102,17 +115,24 @@ impl LuluRecorder {
         tokio::time::sleep(Duration::from_millis(300)).await;
 
         self.sub_handle.abort();
+        self.flush_handle.abort();
 
-        let new_records = self.records.lock().unwrap().clone();
+        // Final flush: drain whatever is left in the buffer.
+        let remaining: Vec<CapturedRecord> = {
+            let mut buf = self.records.lock().unwrap();
+            std::mem::take(&mut *buf)
+        };
 
-        write_lulu_file(&self.file_path, &new_records)?;
+        if !remaining.is_empty() {
+            write_lulu_file(&self.file_path, &remaining)?;
+            tracing::info!(
+                "recorder: final flush wrote {} record(s) to {}",
+                remaining.len(),
+                self.file_path.display()
+            );
+        }
 
-        tracing::info!(
-            "recorder: wrote {} record(s) to {}",
-            new_records.len(),
-            self.file_path.display()
-        );
-
+        tracing::info!("recorder: stopped (file: {})", self.file_path.display());
         Ok(())
     }
 }
@@ -200,6 +220,54 @@ async fn subscriber_loop(
                 tracing::debug!("recorder subscriber: {}", e);
                 // Retry after a short delay — broker may not be ready yet.
                 tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Periodic flush loop
+// ---------------------------------------------------------------------------
+
+/// Periodically drains the in-memory buffer and appends its contents to the
+/// `.lulu` file on disk.  If the write fails the records are pushed back into
+/// the buffer so they can be retried on the next tick or during the final
+/// flush in [`LuluRecorder::stop`].
+async fn flush_loop(
+    records:   Arc<Mutex<Vec<CapturedRecord>>>,
+    file_path: PathBuf,
+) {
+    loop {
+        tokio::time::sleep(FLUSH_INTERVAL).await;
+
+        // Drain the buffer while holding the lock as briefly as possible.
+        let batch: Vec<CapturedRecord> = {
+            let mut buf = records.lock().unwrap();
+            std::mem::take(&mut *buf)
+        };
+
+        if batch.is_empty() {
+            continue;
+        }
+
+        match write_lulu_file(&file_path, &batch) {
+            Ok(()) => {
+                tracing::debug!(
+                    "recorder: flushed {} record(s) to {}",
+                    batch.len(),
+                    file_path.display()
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    "recorder: flush failed ({}), re-queuing {} record(s)",
+                    e,
+                    batch.len()
+                );
+                // Push the records back so they are not lost.
+                let mut buf = records.lock().unwrap();
+                // Prepend so ordering is preserved (old batch first).
+                batch.into_iter().rev().for_each(|r| buf.insert(0, r));
             }
         }
     }
