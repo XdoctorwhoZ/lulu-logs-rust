@@ -965,6 +965,12 @@ mod tests {
 
     /// Helper: forcibly reset the global active-scenario and active-step state
     /// so that tests are independent from each other.
+    ///
+    /// Uses `unwrap_or_else` to recover from poisoned mutexes: a `#[should_panic]`
+    /// test causes a panic in the test thread, which drops any `MutexGuard`s in
+    /// scope and marks the mutex as poisoned.  The production code never panics
+    /// while holding these locks (the guard is always dropped before the panic),
+    /// so using plain `unwrap()` there remains appropriate.
     fn reset_global_tracking() {
         *get_global_scenario().lock().unwrap_or_else(|e| e.into_inner()) = None;
         *get_global_step().lock().unwrap_or_else(|e| e.into_inner()) = None;
@@ -1010,7 +1016,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "scenario 'first' is already running")]
+    #[should_panic(
+        expected = "[lulu-logs] scenario 'first' is already running; cannot start 'second'"
+    )]
     fn test_lulu_scenario_panics_when_already_active() {
         reset_global_tracking();
 
@@ -1024,7 +1032,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "step 'first-step' is already running")]
+    #[should_panic(
+        expected = "[lulu-logs] step 'first-step' is already running; cannot start 'second-step'"
+    )]
     fn test_create_step_panics_when_already_active() {
         reset_global_tracking();
 
@@ -1036,7 +1046,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "no active scenario")]
+    #[should_panic(
+        expected = "[lulu-logs] no active scenario; call lulu_scenario() before lulu_step()"
+    )]
     fn test_lulu_step_panics_without_active_scenario() {
         reset_global_tracking();
 
