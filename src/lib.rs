@@ -273,6 +273,13 @@ fn handle_scenario_publish_error(err: LuluError) {
     }
 }
 
+fn build_step_topic(
+    scenario_name: &str,
+    step_name: &str,
+) -> (String, &'static str) {
+    (format!("{scenario_name}/{step_name}"), "step")
+}
+
 /// Handle returned by [`lulu_scenario`] to mark the end of a test scenario.
 ///
 /// Call [`.end()`](ScenarioHandle::end) to publish the `scenario_end` entry.
@@ -286,7 +293,7 @@ pub struct ScenarioHandle {
 impl ScenarioHandle {
     /// Publishes a `step_beg` log entry and returns a [`StepHandle`].
     ///
-    /// Source and attribute are inherited from the scenario (`"test"` / `"scenario"`).
+    /// Source is `{scenario_name}/{step_name}`, attribute is `"step"`.
     /// The `span_id` is auto-generated as `"step-{step_name}-{random6}"`.
     /// Prints a coloured `▸ step_name` line when `terminal_logger` is enabled.
     ///
@@ -323,12 +330,13 @@ impl ScenarioHandle {
             metadata,
             None,
         );
-        if let Err(e) = lulu_publish("test", "scenario", LogLevel::Info, Data::StepBeg(json)) {
+        let (source, attribute) = build_step_topic(&self.scenario_name, step_name);
+        if let Err(e) = lulu_publish(&source, attribute, LogLevel::Info, Data::StepBeg(json)) {
             handle_scenario_publish_error(e);
         }
         StepHandle {
-            source: "test".to_string(),
-            attribute: "scenario".to_string(),
+            source,
+            attribute: attribute.to_string(),
             span_id,
             step_name: step_name.to_string(),
             metadata: metadata.cloned(),
@@ -771,6 +779,18 @@ impl Drop for StepHandle {
         if !self.finished {
             self.finish(true, None);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_step_topic;
+
+    #[test]
+    fn test_build_step_topic_source_and_attribute() {
+        let (source, attribute) = build_step_topic("scenario-a", "step-b");
+        assert_eq!(source, "scenario-a/step-b");
+        assert_eq!(attribute, "step");
     }
 }
 
