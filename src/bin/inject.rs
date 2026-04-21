@@ -755,19 +755,21 @@ fn inject_test_scenarios() {
     let name3 = "signal-integrity-check";
 
     print_scenario_step("BEG", "test", "scenario", name3);
-    let _scenario3 = lulu_scenario(name3);
-    std::thread::sleep(Duration::from_millis(10));
+    {
+        let _scenario3 = lulu_scenario(name3);
+        std::thread::sleep(Duration::from_millis(10));
 
-    let _ = lulu_publish(
-        "oscilloscope/probe-a",
-        "frequency",
-        LogLevel::Info,
-        Data::Float64(1_000_000.0),
-    );
-    println!("      ↳ oscilloscope/probe-a/frequency = 1MHz (float64)");
-    std::thread::sleep(Duration::from_millis(10));
+        let _ = lulu_publish(
+            "oscilloscope/probe-a",
+            "frequency",
+            LogLevel::Info,
+            Data::Float64(1_000_000.0),
+        );
+        println!("      ↳ oscilloscope/probe-a/frequency = 1MHz (float64)");
+        std::thread::sleep(Duration::from_millis(10));
 
-    println!("      ↳ (scenario left open — in progress)");
+        println!("      ↳ (scenario left open — dropped at scope end)");
+    } // _scenario3 dropped here, clearing the global active scenario
     println!("────────────────────────────────────────────────────────");
 
     // ── Tool call spans ───────────────────────────────────────────────────
