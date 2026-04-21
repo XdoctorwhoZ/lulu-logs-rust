@@ -44,6 +44,8 @@ use serializer::PendingMessage;
 static GLOBAL_CLIENT: OnceLock<LuluClient> = OnceLock::new();
 static TOKIO_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 static GLOBAL_RECORDER: OnceLock<Mutex<Option<LuluRecorder>>> = OnceLock::new();
+static GLOBAL_ACTIVE_SCENARIO: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+static GLOBAL_ACTIVE_STEP: OnceLock<Mutex<Option<String>>> = OnceLock::new();
 
 /// Returns (or lazily creates) the dedicated single-threaded tokio runtime.
 pub(crate) fn get_or_init_runtime() -> &'static tokio::runtime::Runtime {
@@ -291,8 +293,9 @@ impl ScenarioHandle {
     /// Prints a coloured `▸ step_name` line when `terminal_logger` is enabled.
     ///
     /// # Panics
-    /// Panics if the client is not initialised. A full publish queue is
-    /// treated as a warning and silently ignored.
+    /// Panics if the client is not initialised, or if a step is already
+    /// running. A full publish queue is treated as a warning and silently
+    /// ignored.
     pub fn step(&self, step_name: &str) -> StepHandle {
         self.step_with_metadata(step_name, None)
     }
@@ -300,41 +303,15 @@ impl ScenarioHandle {
     /// Same as [`step`](Self::step) but attaches metadata to the `step_beg` entry.
     ///
     /// # Panics
-    /// Panics if the client is not initialised. A full publish queue is
-    /// treated as a warning and silently ignored.
+    /// Panics if the client is not initialised, or if a step is already
+    /// running. A full publish queue is treated as a warning and silently
+    /// ignored.
     pub fn step_with_metadata(
         &self,
         step_name: &str,
         metadata: Option<&Value>,
     ) -> StepHandle {
-        terminal_logger::print_step_beg(step_name);
-        let span_id = format!(
-            "step-{}-{}",
-            step_name,
-            rand_util::generate_random_string(6)
-        );
-        let json = build_span_payload(
-            &span_id,
-            Some(step_name),
-            None,
-            None,
-            None,
-            None,
-            metadata,
-            None,
-        );
-        if let Err(e) = lulu_publish("test", "scenario", LogLevel::Info, Data::StepBeg(json)) {
-            handle_scenario_publish_error(e);
-        }
-        StepHandle {
-            source: "test".to_string(),
-            attribute: "scenario".to_string(),
-            span_id,
-            step_name: step_name.to_string(),
-            metadata: metadata.cloned(),
-            start_time: Instant::now(),
-            finished: false,
-        }
+        create_step_internal(step_name, metadata)
     }
 
     /// Publishes a `scenario_end` log entry for this scenario.
@@ -356,6 +333,10 @@ impl ScenarioHandle {
     }
 
     fn finish(&self, success: bool, error: Option<&str>) {
+        {
+            let mut guard = get_global_scenario().lock().unwrap();
+            *guard = None;
+        }
         terminal_logger::print_end(&self.scenario_name, success, error);
         let span_id = format!("scenario-{}", self.scenario_name);
         let json = build_span_payload(
@@ -393,10 +374,27 @@ impl Drop for ScenarioHandle {
 /// The `span_id` is derived as `"scenario-{scenario_name}"`.
 /// Prints a coloured `▶ scenario_name` line when `terminal_logger` is enabled.
 ///
+/// The active scenario handle is registered in the global lulu context so that
+/// [`lulu_step`] can create steps without an explicit handle reference.
+///
 /// # Panics
-/// Panics if the client is not initialised. A full publish queue is
-/// treated as a warning and silently ignored.
+/// Panics if another scenario is already running, or if the client is not
+/// initialised. A full publish queue is treated as a warning and silently ignored.
 pub fn lulu_scenario(scenario_name: &str) -> ScenarioHandle {
+    let active = {
+        let guard = get_global_scenario().lock().unwrap();
+        guard.clone()
+    };
+    if let Some(active) = active {
+        panic!(
+            "[lulu-logs] scenario '{}' is already running; cannot start '{}'",
+            active, scenario_name
+        );
+    }
+    {
+        let mut guard = get_global_scenario().lock().unwrap();
+        *guard = Some(scenario_name.to_string());
+    }
     terminal_logger::print_beg(scenario_name);
     let span_id = format!("scenario-{}", scenario_name);
     let json = build_span_payload(
@@ -416,6 +414,97 @@ pub fn lulu_scenario(scenario_name: &str) -> ScenarioHandle {
         scenario_name: scenario_name.to_string(),
         finished: false,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Step helpers (used by both ScenarioHandle::step_with_metadata and lulu_step)
+// ---------------------------------------------------------------------------
+
+/// Internal helper that creates a step, registers it in the global step
+/// tracker, and returns the [`StepHandle`].
+///
+/// Panics if a step is already running.
+fn create_step_internal(step_name: &str, metadata: Option<&Value>) -> StepHandle {
+    let active = {
+        let guard = get_global_step().lock().unwrap();
+        guard.clone()
+    };
+    if let Some(active) = active {
+        panic!(
+            "[lulu-logs] step '{}' is already running; cannot start '{}'",
+            active, step_name
+        );
+    }
+    {
+        let mut guard = get_global_step().lock().unwrap();
+        *guard = Some(step_name.to_string());
+    }
+    terminal_logger::print_step_beg(step_name);
+    let span_id = format!(
+        "step-{}-{}",
+        step_name,
+        rand_util::generate_random_string(6)
+    );
+    let json = build_span_payload(
+        &span_id,
+        Some(step_name),
+        None,
+        None,
+        None,
+        None,
+        metadata,
+        None,
+    );
+    if let Err(e) = lulu_publish("test", "scenario", LogLevel::Info, Data::StepBeg(json)) {
+        handle_scenario_publish_error(e);
+    }
+    StepHandle {
+        source: "test".to_string(),
+        attribute: "scenario".to_string(),
+        span_id,
+        step_name: step_name.to_string(),
+        metadata: metadata.cloned(),
+        start_time: Instant::now(),
+        finished: false,
+    }
+}
+
+/// Publishes a `step_beg` log entry and returns a [`StepHandle`].
+///
+/// This is a simpler alternative to [`ScenarioHandle::step`] that does not
+/// require a reference to the scenario handle.  The active scenario is
+/// verified from the global lulu context.
+///
+/// Source and attribute are inherited from the active scenario (`"test"` /
+/// `"scenario"`).  The `span_id` is auto-generated as
+/// `"step-{step_name}-{random6}"`.
+/// Prints a coloured `▸ step_name` line when `terminal_logger` is enabled.
+///
+/// # Panics
+/// Panics if no scenario is currently active (call [`lulu_scenario`] first),
+/// if a step is already running, or if the client is not initialised.
+/// A full publish queue is treated as a warning and silently ignored.
+pub fn lulu_step(step_name: &str) -> StepHandle {
+    lulu_step_with_metadata(step_name, None)
+}
+
+/// Same as [`lulu_step`] but attaches metadata to the `step_beg` entry.
+///
+/// # Panics
+/// Panics if no scenario is currently active (call [`lulu_scenario`] first),
+/// if a step is already running, or if the client is not initialised.
+/// A full publish queue is treated as a warning and silently ignored.
+pub fn lulu_step_with_metadata(step_name: &str, metadata: Option<&Value>) -> StepHandle {
+    let scenario_active = {
+        let guard = get_global_scenario().lock().unwrap();
+        guard.is_some()
+    };
+    if !scenario_active {
+        panic!(
+            "[lulu-logs] no active scenario; call lulu_scenario() before lulu_step()"
+        );
+    }
+    create_step_internal(step_name, metadata)
 }
 
 /// Builder for a generic span.
@@ -743,6 +832,10 @@ impl StepHandle {
         success: bool,
         error: Option<&str>,
     ) {
+        {
+            let mut guard = get_global_step().lock().unwrap();
+            *guard = None;
+        }
         let duration_ms = Some(self.start_time.elapsed().as_millis() as u64);
         terminal_logger::print_step_end(&self.step_name, success, error);
         let json = build_span_payload(
@@ -780,6 +873,14 @@ impl Drop for StepHandle {
 
 fn get_or_init_recorder() -> &'static Mutex<Option<LuluRecorder>> {
     GLOBAL_RECORDER.get_or_init(|| Mutex::new(None))
+}
+
+fn get_global_scenario() -> &'static Mutex<Option<String>> {
+    GLOBAL_ACTIVE_SCENARIO.get_or_init(|| Mutex::new(None))
+}
+
+fn get_global_step() -> &'static Mutex<Option<String>> {
+    GLOBAL_ACTIVE_STEP.get_or_init(|| Mutex::new(None))
 }
 
 /// Starts an embedded MQTT broker and records all `lulu/#` log entries to a
@@ -852,4 +953,116 @@ pub fn lulu_stop_recorder() -> Result<(), LuluError> {
     }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: forcibly reset the global active-scenario and active-step state
+    /// so that tests are independent from each other.
+    fn reset_global_tracking() {
+        *get_global_scenario().lock().unwrap_or_else(|e| e.into_inner()) = None;
+        *get_global_step().lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
+    #[test]
+    fn test_scenario_sets_global_active() {
+        reset_global_tracking();
+
+        // Before creating a scenario the slot is empty.
+        assert!(get_global_scenario().lock().unwrap().is_none());
+
+        // Simulate what lulu_scenario does: register the active scenario name.
+        *get_global_scenario().lock().unwrap() = Some("my-scenario".to_string());
+
+        assert_eq!(
+            get_global_scenario().lock().unwrap().as_deref(),
+            Some("my-scenario")
+        );
+
+        // Simulate what finish() does: clear the global.
+        *get_global_scenario().lock().unwrap() = None;
+        assert!(get_global_scenario().lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_step_sets_global_active() {
+        reset_global_tracking();
+
+        assert!(get_global_step().lock().unwrap().is_none());
+
+        // Simulate what create_step_internal does: register the active step.
+        *get_global_step().lock().unwrap() = Some("my-step".to_string());
+
+        assert_eq!(
+            get_global_step().lock().unwrap().as_deref(),
+            Some("my-step")
+        );
+
+        // Simulate what StepHandle::finish does: clear the global.
+        *get_global_step().lock().unwrap() = None;
+        assert!(get_global_step().lock().unwrap().is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "scenario 'first' is already running")]
+    fn test_lulu_scenario_panics_when_already_active() {
+        reset_global_tracking();
+
+        // Mark a scenario as active.
+        *get_global_scenario().lock().unwrap() = Some("first".to_string());
+
+        // Attempting to start another should panic.
+        // `lulu_scenario` checks the global before calling `lulu_publish`,
+        // so the panic fires even without a live MQTT client.
+        let _ = lulu_scenario("second");
+    }
+
+    #[test]
+    #[should_panic(expected = "step 'first-step' is already running")]
+    fn test_create_step_panics_when_already_active() {
+        reset_global_tracking();
+
+        // Mark a step as active.
+        *get_global_step().lock().unwrap() = Some("first-step".to_string());
+
+        // Attempting to start another step should panic.
+        create_step_internal("second-step", None);
+    }
+
+    #[test]
+    #[should_panic(expected = "no active scenario")]
+    fn test_lulu_step_panics_without_active_scenario() {
+        reset_global_tracking();
+
+        // No active scenario — should panic before even trying to publish.
+        let _ = lulu_step("orphan-step");
+    }
+
+    #[test]
+    fn test_scenario_cleared_on_finish() {
+        reset_global_tracking();
+
+        *get_global_scenario().lock().unwrap() = Some("clearing-test".to_string());
+        assert!(get_global_scenario().lock().unwrap().is_some());
+
+        *get_global_scenario().lock().unwrap() = None;
+        assert!(get_global_scenario().lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_step_cleared_on_finish() {
+        reset_global_tracking();
+
+        *get_global_step().lock().unwrap() = Some("clearing-step".to_string());
+        assert!(get_global_step().lock().unwrap().is_some());
+
+        *get_global_step().lock().unwrap() = None;
+        assert!(get_global_step().lock().unwrap().is_none());
+    }
 }
