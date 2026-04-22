@@ -273,13 +273,6 @@ fn handle_scenario_publish_error(err: LuluError) {
     }
 }
 
-fn build_step_topic(
-    scenario_name: &str,
-    step_name: &str,
-) -> (String, &'static str) {
-    (format!("{scenario_name}/{step_name}"), "step")
-}
-
 /// Handle returned by [`lulu_scenario`] to mark the end of a test scenario.
 ///
 /// Call [`.end()`](ScenarioHandle::end) to publish the `scenario_end` entry.
@@ -330,10 +323,15 @@ impl ScenarioHandle {
             metadata,
             None,
         );
-        let (source, attribute) = build_step_topic(&self.scenario_name, step_name);
+
+        // Publish the step_beg entry. If this fails, we still want to return a
+        let source = format!("{}/{}", self.scenario_name, step_name);
+        let attribute = "step";
         if let Err(e) = lulu_publish(&source, attribute, LogLevel::Info, Data::StepBeg(json)) {
             handle_scenario_publish_error(e);
         }
+
+        // Return the handle for this step
         StepHandle {
             source,
             attribute: attribute.to_string(),
@@ -381,7 +379,7 @@ impl ScenarioHandle {
         } else {
             LogLevel::Error
         };
-        if let Err(e) = lulu_publish("test", "scenario", level, Data::ScenarioEnd(json)) {
+        if let Err(e) = lulu_publish(&self.scenario_name, "scenario", level, Data::ScenarioEnd(json)) {
             handle_scenario_publish_error(e);
         }
     }
@@ -405,7 +403,10 @@ impl Drop for ScenarioHandle {
 /// Panics if the client is not initialised. A full publish queue is
 /// treated as a warning and silently ignored.
 pub fn lulu_scenario(scenario_name: &str) -> ScenarioHandle {
+    // Terminal output if enabled
     terminal_logger::print_beg(scenario_name);
+
+    // Build the payload
     let span_id = format!("scenario-{}", scenario_name);
     let json = build_span_payload(
         &span_id,
@@ -417,9 +418,13 @@ pub fn lulu_scenario(scenario_name: &str) -> ScenarioHandle {
         None,
         None,
     );
-    if let Err(e) = lulu_publish("test", "scenario", LogLevel::Info, Data::ScenarioBeg(json)) {
+
+    // Publish the scenario_beg entry
+    if let Err(e) = lulu_publish(scenario_name, "scenario", LogLevel::Info, Data::ScenarioBeg(json)) {
         handle_scenario_publish_error(e);
     }
+
+    // Return the handle for this scenario
     ScenarioHandle {
         scenario_name: scenario_name.to_string(),
         finished: false,
@@ -779,18 +784,6 @@ impl Drop for StepHandle {
         if !self.finished {
             self.finish(true, None);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::build_step_topic;
-
-    #[test]
-    fn test_build_step_topic_source_and_attribute() {
-        let (source, attribute) = build_step_topic("scenario-a", "step-b");
-        assert_eq!(source, "scenario-a/step-b");
-        assert_eq!(attribute, "step");
     }
 }
 
