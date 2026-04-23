@@ -172,13 +172,6 @@ impl std::fmt::Display for DataType {
 /// Using this enum instead of a separate `(DataType, Vec<u8>)` pair ensures that the
 /// type tag and the encoded bytes can never disagree at the call site.
 ///
-/// # Example
-/// ```rust
-/// use lulu_logs_client::Data;
-///
-/// let d = Data::Float32(3.3);
-/// let (wire_type, bytes) = (d.data_type(), d.encode());
-/// ```
 #[derive(Debug, Clone)]
 pub enum Data {
     /// UTF-8 string.

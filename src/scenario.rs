@@ -22,18 +22,6 @@
 //! * `✓ scenario-name` — scenario passed
 //! * `✗ scenario-name — error …` — scenario failed
 //! * (step output is delegated to the [`step`](crate::step) module)
-//!
-//! ## Example
-//!
-//! ```no_run
-//! use lulu_logs_client::lulu_scenario;
-//!
-//! let scenario = lulu_scenario("connection-test");
-//! let step = scenario.step("open-socket");
-//! // … do work …
-//! step.end(Ok(()));
-//! scenario.end(Ok(()));
-//! ```
 
 use serde_json::Value;
 
@@ -203,14 +191,6 @@ impl Drop for ScenarioHandle {
 /// Panics if the client is not initialised. A full publish queue is
 /// treated as a warning and silently ignored.
 ///
-/// # Example
-/// ```no_run
-/// use lulu_logs_client::lulu_scenario;
-///
-/// let scenario = lulu_scenario("my-test");
-/// scenario.step("check-power").end(Ok(()));
-/// scenario.end(Ok(()));
-/// ```
 pub fn lulu_scenario(scenario_name: &str) -> ScenarioHandle {
     terminal_logger::print_beg(scenario_name);
 
