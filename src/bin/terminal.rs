@@ -74,7 +74,6 @@ fn scenario_voltage_regulation() {
     let _ = voltage.info(Data::Float32(3.31));
     pace();
 
-    let step1_result = json!({"actual_v": 3.31});
     step1.end(Ok(()));
     pace();
 
@@ -88,7 +87,6 @@ fn scenario_voltage_regulation() {
     let _ = voltage.info(Data::Float32(3.29));
     pace();
 
-    let step2_result = json!({"min_v": 3.29, "max_v": 3.31, "ripple_mv": 20});
     step2.end(Ok(()));
     pace();
 
@@ -117,7 +115,6 @@ fn scenario_overcurrent_protection() {
     let _ = current.warn(Data::Float32(0.95));
     pace();
 
-    let step1_result = json!({"peak_a": 0.95});
     step1.end(Ok(()));
     pace();
 
@@ -130,7 +127,6 @@ fn scenario_overcurrent_protection() {
     let _ = current.error(Data::Float32(1.05));
     pace();
 
-    let step2_result = json!({"peak_a": 1.05, "protection_triggered": false});
     step2.end(
         Err(anyhow::anyhow!("protection did not trigger within 100ms")),
     );
