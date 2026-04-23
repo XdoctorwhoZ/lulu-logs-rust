@@ -1,4 +1,3 @@
-use crate::error::LuluError;
 use crate::models::{Data, LogLevel};
 use crate::serializer::PendingMessage;
 use crate::terminal_logger;
@@ -21,8 +20,8 @@ use crate::GLOBAL_CLIENT;
 ///
 /// let voltage = LuluPublisher::new("psu/channel-1", "voltage")
 ///     .terminal(true);
-/// voltage.info(Data::Float32(3.31)).unwrap();
-/// voltage.warn(Data::Float32(2.80)).unwrap();
+/// voltage.info(Data::Float32(3.31));
+/// voltage.warn(Data::Float32(2.80));
 /// ```
 #[derive(Clone, Debug)]
 pub struct LuluPublisher {
@@ -62,7 +61,7 @@ impl LuluPublisher {
     /// use lulu_logs::{LuluPublisher, Data};
     ///
     /// let psu = LuluPublisher::new("psu/channel-1", "voltage");
-    /// psu.att("current").info(Data::Float32(1.25)).unwrap();
+    /// psu.att("current").info(Data::Float32(1.25));
     /// ```
     ///
     /// # Panics
@@ -107,46 +106,47 @@ impl LuluPublisher {
         self
     }
 
-    fn publish(&self, level: LogLevel, data: Data) -> Result<(), LuluError> {
+    fn publish(&self, level: LogLevel, data: Data) {
         if self.terminal {
             terminal_logger::print_publish(&self.source, &self.attribute, &level, &data);
         }
-        let client = GLOBAL_CLIENT.get().ok_or(LuluError::NotInitialized)?;
-        client.publish(PendingMessage {
-            source_segments: self.source_segments.clone(),
-            attribute: self.attribute.clone(),
-            level,
-            data,
-        })
+        if let Some(client) = GLOBAL_CLIENT.get() {
+            let _ = client.publish(PendingMessage {
+                source_segments: self.source_segments.clone(),
+                attribute: self.attribute.clone(),
+                level,
+                data,
+            });
+        }
     }
 
     /// Publishes a `Trace`-level log entry.
-    pub fn trace(&self, data: Data) -> Result<(), LuluError> {
+    pub fn trace(&self, data: Data) {
         self.publish(LogLevel::Trace, data)
     }
 
     /// Publishes a `Debug`-level log entry.
-    pub fn debug(&self, data: Data) -> Result<(), LuluError> {
+    pub fn debug(&self, data: Data) {
         self.publish(LogLevel::Debug, data)
     }
 
     /// Publishes an `Info`-level log entry.
-    pub fn info(&self, data: Data) -> Result<(), LuluError> {
+    pub fn info(&self, data: Data) {
         self.publish(LogLevel::Info, data)
     }
 
     /// Publishes a `Warn`-level log entry.
-    pub fn warn(&self, data: Data) -> Result<(), LuluError> {
+    pub fn warn(&self, data: Data) {
         self.publish(LogLevel::Warn, data)
     }
 
     /// Publishes an `Error`-level log entry.
-    pub fn error(&self, data: Data) -> Result<(), LuluError> {
+    pub fn error(&self, data: Data) {
         self.publish(LogLevel::Error, data)
     }
 
     /// Publishes a `Fatal`-level log entry.
-    pub fn fatal(&self, data: Data) -> Result<(), LuluError> {
+    pub fn fatal(&self, data: Data) {
         self.publish(LogLevel::Fatal, data)
     }
 }

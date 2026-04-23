@@ -70,7 +70,7 @@ fn scenario_voltage_regulation() {
     pace();
 
     // Simulate the action — publish real measurement data
-    let _ = voltage.info(Data::Float32(3.31));
+    voltage.info(Data::Float32(3.31));
     pace();
 
     step1.end(Ok(()));
@@ -82,8 +82,8 @@ fn scenario_voltage_regulation() {
         .step_with_metadata("verify-stability", Some(&step2_meta));
     pace();
 
-    let _ = voltage.info(Data::Float32(3.30));
-    let _ = voltage.info(Data::Float32(3.29));
+    voltage.info(Data::Float32(3.30));
+    voltage.info(Data::Float32(3.29));
     pace();
 
     step2.end(Ok(()));
@@ -109,8 +109,8 @@ fn scenario_overcurrent_protection() {
         .step_with_metadata("ramp-current", Some(&step1_meta));
     pace();
 
-    let _ = current.info(Data::Float32(0.45));
-    let _ = current.warn(Data::Float32(0.95));
+    current.info(Data::Float32(0.45));
+    current.warn(Data::Float32(0.95));
     pace();
 
     step1.end(Ok(()));
@@ -122,7 +122,7 @@ fn scenario_overcurrent_protection() {
         .step_with_metadata("trigger-protection", Some(&step2_meta));
     pace();
 
-    let _ = current.error(Data::Float32(1.05));
+    current.error(Data::Float32(1.05));
     pace();
 
     step2.end(
@@ -152,7 +152,7 @@ fn scenario_signal_integrity() {
         .step_with_metadata("measure-frequency", Some(&step_meta));
     pace();
 
-    let _ = frequency.info(Data::Float64(1_000_000.0));
+    frequency.info(Data::Float64(1_000_000.0));
     pace();
 
     // Intentionally no .end() — handles dropped, left in progress.
@@ -163,13 +163,13 @@ fn demo_string_messages() {
     let status = LuluPublisher::new("psu/channel-1", "status")
         .terminal(true);
 
-    let _ = status.info(Data::String("Power supply initialised".into()));
+    status.info(Data::String("Power supply initialised".into()));
     pace();
-    let _ = status.info(Data::String("Output enabled — CV mode".into()));
+    status.info(Data::String("Output enabled — CV mode".into()));
     pace();
-    let _ = status.warn(Data::String("Temperature rising: 62°C".into()));
+    status.warn(Data::String("Temperature rising: 62°C".into()));
     pace();
-    let _ = status.error(Data::String("Over-temperature protection tripped".into()));
+    status.error(Data::String("Over-temperature protection tripped".into()));
     pace();
 }
 
@@ -191,11 +191,11 @@ fn demo_generic_span() {
     pace();
 
     // Publish measurements during calibration.
-    let _ = calibration.info(Data::Float32(4.98));
+    calibration.info(Data::Float32(4.98));
     pace();
-    let _ = calibration.info(Data::Float32(5.01));
+    calibration.info(Data::Float32(5.01));
     pace();
-    let _ = calibration.info(Data::Float32(5.00));
+    calibration.info(Data::Float32(5.00));
     pace();
 
     // End the span.
