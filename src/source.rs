@@ -20,6 +20,7 @@ use crate::topic;
 pub struct LuluSource {
     source_segments: Vec<String>,
     source: String,
+    terminal: bool,
 }
 
 impl LuluSource {
@@ -34,7 +35,17 @@ impl LuluSource {
         Self {
             source_segments,
             source: source.to_string(),
+            terminal: false,
         }
+    }
+
+    /// Enables or disables terminal output for all publishers created from
+    /// this source via [`att`](Self::att).
+    ///
+    /// When enabled, each publish prints a coloured one-liner to stdout.
+    pub fn terminal(mut self, enabled: bool) -> Self {
+        self.terminal = enabled;
+        self
     }
 
     /// Returns a [`LuluPublisher`] bound to this source and the given `attribute`.
@@ -50,6 +61,7 @@ impl LuluSource {
             self.source_segments.clone(),
             self.source.clone(),
             attribute.to_string(),
+            self.terminal,
         )
     }
 }
@@ -98,5 +110,22 @@ mod tests {
     fn test_att_rejects_slash_in_attribute() {
         let s = LuluSource::new("psu/channel-1");
         s.att("a/b");
+    }
+
+    #[test]
+    fn test_terminal_builder_propagates_to_publisher() {
+        // terminal(true) must compile and not panic; the publisher inherits the flag.
+        let s = LuluSource::new("psu/channel-1").terminal(true);
+        let p = s.att("voltage");
+        let debug = format!("{:?}", p);
+        assert!(debug.contains("terminal: true"), "expected terminal: true in {:?}", debug);
+    }
+
+    #[test]
+    fn test_terminal_defaults_to_false() {
+        let s = LuluSource::new("psu/channel-1");
+        let p = s.att("voltage");
+        let debug = format!("{:?}", p);
+        assert!(debug.contains("terminal: false"), "expected terminal: false in {:?}", debug);
     }
 }
