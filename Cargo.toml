@@ -49,7 +49,7 @@ tokio = { version = "1", features = [
 tracing = "0.1"
 
 # Embedded MQTT broker (used by the recorder feature)
-rumqttd = { git = "https://github.com/Panduza/rumqtt", tag = "0.1.0" }
+rumqttd = "0.20.0"
 
 [dev-dependencies]
 tempfile = "3"
