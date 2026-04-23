@@ -17,6 +17,7 @@ mod publisher;
 mod rand_util;
 mod recorder;
 mod serializer;
+mod source;
 mod terminal_logger;
 mod topic;
 
@@ -36,6 +37,7 @@ pub use client::{LuluConfig, LuluConfigBuilder, LuluStats};
 pub use error::LuluError;
 pub use models::{Data, DataType, LogLevel};
 pub use publisher::LuluPublisher;
+pub use source::LuluSource;
 pub use scenario::{lulu_scenario, ScenarioHandle};
 pub use span::{lulu_span, SpanBuilder, SpanHandle};
 pub use step::StepHandle;
@@ -354,14 +356,6 @@ fn get_or_init_recorder() -> &'static Mutex<Option<LuluRecorder>> {
 ///   file already exists its records are preserved and the new entries are
 ///   appended on [`lulu_stop_recorder`].
 ///
-/// # Example
-/// ```no_run
-/// use lulu_logs_client::{lulu_start_recorder, lulu_stop_recorder, lulu_publish, LogLevel, Data};
-///
-/// lulu_start_recorder(None).unwrap();
-/// lulu_publish("my-service", "status", LogLevel::Info, Data::String("ok".into())).unwrap();
-/// lulu_stop_recorder().unwrap();
-/// ```
 pub fn lulu_start_recorder(file_path: Option<PathBuf>) -> Result<(), LuluError> {
     let path = file_path.unwrap_or_else(recorder::default_recording_path);
 

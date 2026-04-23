@@ -25,26 +25,6 @@
 //!       or span.fail("msg")   →  publishes  span_end (failure)
 //!       or  drop              →  publishes  span_end (success, auto)
 //! ```
-//!
-//! ## Example
-//!
-//! ```no_run
-//! use lulu_logs_client::lulu_span;
-//! use serde_json::json;
-//!
-//! let mut span = lulu_span("5V-calibration")
-//!     .source("psu/channel-1")
-//!     .attribute("calibration")
-//!     .kind("calibration")
-//!     .metadata(&json!({"reference_v": 5.0}))
-//!     .terminal(true)
-//!     .begin()
-//!     .unwrap();
-//!
-//! span.set_result(&json!({"avg_v": 4.997}));
-//! span.set_duration_ms(320);
-//! span.end().unwrap();
-//! ```
 
 use serde_json::Value;
 
@@ -287,24 +267,6 @@ impl Drop for SpanHandle {
 /// builder, then call [`.begin()`](SpanBuilder::begin) to publish the
 /// `span_beg` entry and obtain a [`SpanHandle`].
 ///
-/// # Example
-/// ```no_run
-/// use lulu_logs_client::lulu_span;
-/// use serde_json::json;
-///
-/// let mut span = lulu_span("5V-calibration")
-///     .source("psu/channel-1")
-///     .attribute("calibration")
-///     .kind("calibration")
-///     .metadata(&json!({"reference_v": 5.0}))
-///     .terminal(true)
-///     .begin()
-///     .unwrap();
-///
-/// span.set_result(&json!({"avg_v": 4.997}));
-/// span.set_duration_ms(320);
-/// span.end().unwrap();
-/// ```
 pub fn lulu_span(name: &str) -> SpanBuilder {
     SpanBuilder {
         name: name.to_string(),

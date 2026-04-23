@@ -1,0 +1,35 @@
+name: Tag validation
+
+on:
+  push:
+    tags:
+      - "[0-9]*"
+
+jobs:
+  validate-and-test:
+    name: Validate tag & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check tag matches Cargo.toml version
+        run: |
+          CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          TAG="${{ github.ref_name }}"
+          echo "Tag         : $TAG"
+          echo "Cargo version: $CARGO_VERSION"
+          if [ "$TAG" != "$CARGO_VERSION" ]; then
+            echo "::error::Tag '$TAG' does not match Cargo.toml version '$CARGO_VERSION'"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: cargo test --all
