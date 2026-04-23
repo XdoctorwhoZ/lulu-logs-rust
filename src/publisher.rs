@@ -84,12 +84,13 @@ impl LuluPublisher {
         source_segments: Vec<String>,
         source: String,
         attribute: String,
+        terminal: bool,
     ) -> Self {
         Self {
             source_segments,
             source,
             attribute,
-            terminal: false,
+            terminal,
         }
     }
 
