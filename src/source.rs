@@ -13,8 +13,8 @@ use crate::topic;
 /// use lulu_logs::{LuluSource, Data};
 ///
 /// let source = LuluSource::new("my/source");
-/// source.att("toto").info(Data::Float32(1.0)).unwrap();
-/// source.att("voltage").warn(Data::Float32(2.8)).unwrap();
+/// source.att("toto").info(Data::Float32(1.0));
+/// source.att("voltage").warn(Data::Float32(2.8));
 /// ```
 #[derive(Clone, Debug)]
 pub struct LuluSource {
