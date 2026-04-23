@@ -17,6 +17,7 @@ mod publisher;
 mod rand_util;
 mod recorder;
 mod serializer;
+mod source;
 mod terminal_logger;
 mod topic;
 
@@ -36,6 +37,7 @@ pub use client::{LuluConfig, LuluConfigBuilder, LuluStats};
 pub use error::LuluError;
 pub use models::{Data, DataType, LogLevel};
 pub use publisher::LuluPublisher;
+pub use source::LuluSource;
 pub use scenario::{lulu_scenario, ScenarioHandle};
 pub use span::{lulu_span, SpanBuilder, SpanHandle};
 pub use step::StepHandle;

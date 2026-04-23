@@ -17,10 +17,9 @@ use crate::GLOBAL_CLIENT;
 ///
 /// # Example
 /// ```no_run
-/// use lulu_logs_client::{LuluPublisher, Data};
+/// use lulu_logs::{LuluPublisher, Data};
 ///
 /// let voltage = LuluPublisher::new("psu/channel-1", "voltage")
-///     .unwrap()
 ///     .terminal(true);
 /// voltage.info(Data::Float32(3.31)).unwrap();
 /// voltage.warn(Data::Float32(2.80)).unwrap();
@@ -40,43 +39,59 @@ impl LuluPublisher {
     /// Terminal output is disabled by default — call [`.terminal(true)`](Self::terminal)
     /// to enable it.
     ///
-    /// # Errors
-    /// Returns [`LuluError::InvalidSource`] or [`LuluError::InvalidAttribute`]
-    /// if the parameters violate the lulu-logs topic naming rules.
-    pub fn new(source: &str, attribute: &str) -> Result<Self, LuluError> {
-        let source_segments = topic::parse_source(source)?;
-        topic::validate_attribute(attribute)?;
-        Ok(Self {
+    /// # Panics
+    /// Panics if `source` or `attribute` violate the lulu-logs topic naming rules.
+    pub fn new(source: &str, attribute: &str) -> Self {
+        let source_segments = topic::parse_source(source)
+            .unwrap_or_else(|e| panic!("invalid source {:?}: {}", source, e));
+        topic::validate_attribute(attribute)
+            .unwrap_or_else(|e| panic!("invalid attribute {:?}: {}", attribute, e));
+        Self {
             source_segments,
             source: source.to_string(),
             attribute: attribute.to_string(),
             terminal: false,
-        })
+        }
     }
 
     /// Returns a new publisher with a different `attribute`, keeping the same
     /// `source` and `terminal` settings.
     ///
-    /// The new attribute is validated before the publisher is returned.
-    ///
     /// # Example
     /// ```no_run
-    /// use lulu_logs_client::{LuluPublisher, Data};
+    /// use lulu_logs::{LuluPublisher, Data};
     ///
-    /// let psu = LuluPublisher::new("psu/channel-1", "voltage").unwrap();
-    /// psu.att("current").unwrap().info(Data::Float32(1.25)).unwrap();
+    /// let psu = LuluPublisher::new("psu/channel-1", "voltage");
+    /// psu.att("current").info(Data::Float32(1.25)).unwrap();
     /// ```
     ///
-    /// # Errors
-    /// Returns [`LuluError::InvalidAttribute`] if the new attribute is invalid.
-    pub fn att(&self, attribute: &str) -> Result<Self, LuluError> {
-        topic::validate_attribute(attribute)?;
-        Ok(Self {
+    /// # Panics
+    /// Panics if `attribute` is empty or contains `/`.
+    pub fn att(&self, attribute: &str) -> Self {
+        topic::validate_attribute(attribute)
+            .unwrap_or_else(|e| panic!("invalid attribute {:?}: {}", attribute, e));
+        Self {
             source_segments: self.source_segments.clone(),
             source: self.source.clone(),
             attribute: attribute.to_string(),
             terminal: self.terminal,
-        })
+        }
+    }
+
+    /// Creates a publisher from pre-validated parts.  No validation is
+    /// performed — callers must guarantee that `source_segments` and
+    /// `attribute` are already valid.
+    pub(crate) fn from_parts(
+        source_segments: Vec<String>,
+        source: String,
+        attribute: String,
+    ) -> Self {
+        Self {
+            source_segments,
+            source,
+            attribute,
+            terminal: false,
+        }
     }
 
     /// Enables or disables terminal output for this publisher.
@@ -142,8 +157,8 @@ mod tests {
 
     #[test]
     fn test_att_changes_attribute() {
-        let pub1 = LuluPublisher::new("psu/channel-1", "voltage").unwrap();
-        let pub2 = pub1.att("current").unwrap();
+        let pub1 = LuluPublisher::new("psu/channel-1", "voltage");
+        let pub2 = pub1.att("current");
         assert_eq!(pub2.attribute, "current");
         // source is preserved
         assert_eq!(pub2.source, "psu/channel-1");
@@ -152,29 +167,29 @@ mod tests {
 
     #[test]
     fn test_att_preserves_terminal_flag() {
-        let pub1 = LuluPublisher::new("psu/channel-1", "voltage")
-            .unwrap()
-            .terminal(true);
-        let pub2 = pub1.att("current").unwrap();
+        let pub1 = LuluPublisher::new("psu/channel-1", "voltage").terminal(true);
+        let pub2 = pub1.att("current");
         assert!(pub2.terminal);
     }
 
     #[test]
     fn test_att_does_not_modify_original() {
-        let pub1 = LuluPublisher::new("psu/channel-1", "voltage").unwrap();
-        let _pub2 = pub1.att("current").unwrap();
+        let pub1 = LuluPublisher::new("psu/channel-1", "voltage");
+        let _pub2 = pub1.att("current");
         assert_eq!(pub1.attribute, "voltage");
     }
 
     #[test]
+    #[should_panic(expected = "invalid attribute")]
     fn test_att_rejects_empty_attribute() {
-        let pub1 = LuluPublisher::new("psu/channel-1", "voltage").unwrap();
-        assert!(pub1.att("").is_err());
+        let pub1 = LuluPublisher::new("psu/channel-1", "voltage");
+        pub1.att("");
     }
 
     #[test]
+    #[should_panic(expected = "invalid attribute")]
     fn test_att_rejects_attribute_with_slash() {
-        let pub1 = LuluPublisher::new("psu/channel-1", "voltage").unwrap();
-        assert!(pub1.att("a/b").is_err());
+        let pub1 = LuluPublisher::new("psu/channel-1", "voltage");
+        pub1.att("a/b");
     }
 }

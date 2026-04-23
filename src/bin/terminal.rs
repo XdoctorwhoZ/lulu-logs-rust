@@ -57,7 +57,6 @@ fn pace() {
 /// Scenario 1 — all steps pass → scenario succeeds.
 fn scenario_voltage_regulation() {
     let voltage = LuluPublisher::new("psu/channel-1", "voltage")
-        .unwrap()
         .terminal(true);
 
     // ── Begin scenario ────────────────────────────────────────────────────
@@ -98,7 +97,6 @@ fn scenario_voltage_regulation() {
 /// Scenario 2 — second step fails → scenario fails.
 fn scenario_overcurrent_protection() {
     let current = LuluPublisher::new("psu/channel-1", "current")
-        .unwrap()
         .terminal(true);
 
     // ── Begin scenario ────────────────────────────────────────────────────
@@ -142,7 +140,6 @@ fn scenario_overcurrent_protection() {
 /// Scenario 3 — started but never ended (in-progress / pending).
 fn scenario_signal_integrity() {
     let frequency = LuluPublisher::new("oscilloscope/probe-a", "frequency")
-        .unwrap()
         .terminal(true);
 
     // ── Begin scenario ────────────────────────────────────────────────────
@@ -164,7 +161,6 @@ fn scenario_signal_integrity() {
 /// Demo 4 — String attribute: simple status messages.
 fn demo_string_messages() {
     let status = LuluPublisher::new("psu/channel-1", "status")
-        .unwrap()
         .terminal(true);
 
     let _ = status.info(Data::String("Power supply initialised".into()));
@@ -180,7 +176,6 @@ fn demo_string_messages() {
 /// Demo 5 — Generic span: calibration routine.
 fn demo_generic_span() {
     let calibration = LuluPublisher::new("psu/channel-1", "calibration")
-        .unwrap()
         .terminal(true);
 
     // Start a generic span of kind "calibration".
